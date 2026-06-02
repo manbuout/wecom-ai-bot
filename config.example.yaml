@@ -1,0 +1,24 @@
+# ===== 配置模板（复制为 config.yaml 后填写）=====
+# 云端部署时通过环境变量传入，本地开发用 config.yaml
+
+ai:
+  api_key: "your-api-key"
+  base_url: "https://api.xiaomimimo.com/anthropic"
+  model: "mimo-v2.5-pro"
+  temperature: 0.7
+  max_tokens: 2048
+
+persona:
+  profile_path: "profiles/pig头.yaml"
+  history_length: 20
+
+wechat:
+  enabled: true
+  target_users: []
+
+wecom:
+  corp_id: "your-corp-id"
+  agent_id: 0
+  secret: "your-secret"
+  token: "bot123"
+  encoding_aes_key: ""

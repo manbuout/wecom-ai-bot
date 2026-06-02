@@ -1,0 +1,8 @@
+# 敏感配置（API Key 等，通过环境变量传入）
+config.yaml
+*.pkl
+__pycache__/
+*.pyc
+.DS_Store
+ngrok.exe
+bore.exe

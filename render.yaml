@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: wecom-ai-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    envVars:
+      - key: CORP_ID
+        value: ww527add675f6c7176
+      - key: AGENT_ID
+        value: "1000002"
+      - key: SECRET
+        value: wh6ZfjWvqUh403RHe_xL8KSJXLGAH6osqk2MTAPjj8o
+      - key: WECOM_TOKEN
+        value: bot123
+      - key: AI_API_KEY
+        value: sk-cfq4btx9wrbizsm7pfvacbnjzvchilamgecfribamujkha4n
+      - key: AI_BASE_URL
+        value: https://api.xiaomimimo.com/anthropic
+      - key: AI_MODEL
+        value: mimo-v2.5-pro
