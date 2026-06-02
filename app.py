@@ -6,10 +6,14 @@
 import sys
 import os
 import hashlib
+import base64
+import struct
 import xml.etree.ElementTree as ET
 from datetime import datetime
 
 from flask import Flask, request, jsonify, send_from_directory
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
 import yaml
 
 # 加载配置
@@ -27,6 +31,7 @@ CORP_ID = os.environ.get("CORP_ID", config.get("wecom", {}).get("corp_id", ""))
 AGENT_ID = int(os.environ.get("AGENT_ID", config.get("wecom", {}).get("agent_id", 0)))
 SECRET = os.environ.get("SECRET", config.get("wecom", {}).get("secret", ""))
 TOKEN = os.environ.get("WECOM_TOKEN", config.get("wecom", {}).get("token", "bot123"))
+ENCODING_AES_KEY = os.environ.get("ENCODING_AES_KEY", config.get("wecom", {}).get("encoding_aes_key", ""))
 AI_API_KEY = os.environ.get("AI_API_KEY", config.get("ai", {}).get("api_key", ""))
 AI_BASE_URL = os.environ.get("AI_BASE_URL", config.get("ai", {}).get("base_url", ""))
 AI_MODEL = os.environ.get("AI_MODEL", config.get("ai", {}).get("model", ""))
@@ -86,6 +91,30 @@ def index():
     return "企业微信 AI Bot 运行中 ✅"
 
 
+def decrypt_echostr(encrypted_echostr, encoding_aes_key, corp_id):
+    """解密企业微信的 echostr"""
+    # EncodingAESKey 是 43 字符，Base64 编码后得到 32 字节的 AES 密钥
+    aes_key = base64.b64decode(encoding_aes_key + "=")
+    # echostr 是 Base64 编码的
+    encrypted_data = base64.b64decode(encrypted_echostr)
+    # IV 是 AES 密钥的前 16 字节
+    iv = aes_key[:16]
+    # AES-CBC 解密
+    cipher = Cipher(algorithms.AES(aes_key), modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    decrypted = decryptor.update(encrypted_data) + decryptor.finalize()
+    # 去除 PKCS7 填充
+    pad_len = decrypted[-1]
+    decrypted = decrypted[:-pad_len]
+    # 解密后的数据：16 字节随机 + 4 字节消息长度 + 消息内容 + corp_id
+    content_len = struct.unpack(">I", decrypted[16:20])[0]
+    content = decrypted[20:20 + content_len].decode("utf-8")
+    from_corp_id = decrypted[20 + content_len:].decode("utf-8")
+    if from_corp_id != corp_id:
+        raise ValueError(f"corp_id 不匹配: {from_corp_id} != {corp_id}")
+    return content
+
+
 @app.route("/wecom/callback", methods=["GET"])
 def verify():
     """企业微信验证回调 URL"""
@@ -95,21 +124,27 @@ def verify():
     echostr = request.args.get("echostr", "")
 
     print(f"[验证] msg_signature={msg_signature}, timestamp={timestamp}, nonce={nonce}")
+    print(f"[验证] ENCODING_AES_KEY 长度: {len(ENCODING_AES_KEY)}")
 
     # 签名验证
-    tmp_list = sorted([TOKEN, timestamp, nonce])
+    tmp_list = sorted([TOKEN, timestamp, nonce, echostr])
     tmp_str = "".join(tmp_list)
     hash_str = hashlib.sha1(tmp_str.encode()).hexdigest()
 
     print(f"[验证] 计算: {hash_str}, 期望: {msg_signature}")
 
     if hash_str == msg_signature:
-        print("[验证] ✅ 通过")
-        return echostr
+        # 解密 echostr
+        try:
+            decrypted = decrypt_echostr(echostr, ENCODING_AES_KEY, CORP_ID)
+            print(f"[验证] ✅ 解密成功: {decrypted}")
+            return decrypted
+        except Exception as e:
+            print(f"[验证] ❌ 解密失败: {e}")
+            return f"decrypt error: {e}", 403
     else:
-        # 也直接返回，某些情况下企业微信不校验签名
-        print("[验证] ⚠️ 签名不匹配，仍返回 echostr")
-        return echostr
+        print("[验证] ❌ 签名不匹配")
+        return "signature mismatch", 403
 
 
 @app.route("/wecom/callback", methods=["POST"])
