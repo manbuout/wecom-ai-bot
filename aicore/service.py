@@ -72,25 +72,30 @@ class AIService:
     """AI 聊天服务"""
 
     def __init__(self, config_path: str = "config.yaml"):
-        self.config = load_config(config_path)
-        ai_config = self.config["ai"]
+        # 尝试加载配置文件，如果不存在则用环境变量
+        try:
+            self.config = load_config(config_path)
+        except FileNotFoundError:
+            self.config = {}
+
+        ai_config = self.config.get("ai", {})
 
         self.client = anthropic.Anthropic(
-            api_key=ai_config["api_key"],
-            base_url=ai_config["base_url"],
+            api_key=os.environ.get("AI_API_KEY", ai_config.get("api_key", "")),
+            base_url=os.environ.get("AI_BASE_URL", ai_config.get("base_url", "")),
         )
-        self.model = ai_config["model"]
+        self.model = os.environ.get("AI_MODEL", ai_config.get("model", ""))
         self.temperature = ai_config.get("temperature", 0.7)
         self.max_tokens = ai_config.get("max_tokens", 2048)
 
         # 加载人设
-        persona_path = self.config["persona"]["profile_path"]
+        persona_path = self.config.get("persona", {}).get("profile_path", "profiles/pig头.yaml")
         persona = load_persona(persona_path)
         self.system_prompt = build_system_prompt(persona)
         self.persona_name = persona["name"]
 
         # 对话历史
-        self.history_length = self.config["persona"].get("history_length", 20)
+        self.history_length = self.config.get("persona", {}).get("history_length", 20)
         self.history = []
 
     def chat(self, user_message: str) -> str:
